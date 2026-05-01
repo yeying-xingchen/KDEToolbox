@@ -465,6 +465,11 @@ class MainWindow(QWidget):
         msg_box.exec()
 
     def closeEvent(self, event):
-        for thread in self.scheduler_threads:
-            thread.stop()
-        event.accept()
+        if self.tray_icon and self.tray_icon.isVisible():
+            event.ignore()
+            self.hide()
+            self.status_bar.showMessage("已隐藏到系统托盘")
+        else:
+            for thread in self.scheduler_threads:
+                thread.stop()
+            event.accept()
