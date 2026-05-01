@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit,
-    QMessageBox, QStatusBar, QFrame,
+    QMessageBox, QStatusBar, QFrame, QCheckBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
@@ -11,6 +11,7 @@ import subprocess
 
 from kde_toolbox.kde.service import KdeService, DisplayServer
 from kde_toolbox.core.config import AppConfig, ScheduledTask
+from kde_toolbox.core.config import is_auto_start_enabled, apply_auto_start_setting
 from kde_toolbox.core.scheduler import SchedulerThread
 from kde_toolbox.ui.tray_icon import TrayIcon
 
@@ -199,6 +200,7 @@ class MainWindow(QWidget):
 
         main_layout.addWidget(self._create_system_info_group())
         main_layout.addWidget(self._create_quick_actions_group())
+        main_layout.addWidget(self._create_settings_group())
         main_layout.addWidget(self._create_scheduler_group())
 
         self.status_bar = QStatusBar()
@@ -282,6 +284,38 @@ class MainWindow(QWidget):
             layout.addWidget(btn)
 
         return group
+
+    def _create_settings_group(self) -> QGroupBox:
+        group = QGroupBox(" 设置")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(10)
+
+        self.chk_auto_start = QCheckBox("开机自启")
+        self.chk_auto_start.setChecked(is_auto_start_enabled())
+        self.chk_auto_start.stateChanged.connect(self._on_auto_start_changed)
+        layout.addWidget(self.chk_auto_start)
+
+        self.chk_minimize_to_tray = QCheckBox("最小化到系统托盘")
+        self.chk_minimize_to_tray.setChecked(self.config.minimize_to_tray)
+        self.chk_minimize_to_tray.stateChanged.connect(self._on_minimize_to_tray_changed)
+        layout.addWidget(self.chk_minimize_to_tray)
+
+        return group
+
+    def _on_auto_start_changed(self, state):
+        enabled = state == Qt.CheckState.Checked.value
+        apply_auto_start_setting(enabled)
+        self.config.auto_start = enabled
+        self.config.save()
+        status = "已启用" if enabled else "已禁用"
+        self.status_bar.showMessage(f"开机自启{status}")
+
+    def _on_minimize_to_tray_changed(self, state):
+        enabled = state == Qt.CheckState.Checked.value
+        self.config.minimize_to_tray = enabled
+        self.config.save()
+        status = "已启用" if enabled else "已禁用"
+        self.status_bar.showMessage(f"最小化到系统托盘{status}")
 
     def _create_scheduler_group(self) -> QGroupBox:
         group = QGroupBox(" 定时任务")

@@ -121,29 +121,25 @@ jobs:
           mkdir -p deb-build/usr/bin
           mkdir -p deb-build/usr/lib/python3/dist-packages/kde_toolbox
           mkdir -p deb-build/usr/share/applications
-          
+
           cp kde-toolbox.desktop deb-build/usr/share/applications/
-          
-          cat > deb-build/DEBIAN/control << EOF
-Package: kde-toolbox
-Version: $VERSION
-Section: utils
-Priority: optional
-Architecture: all
-Depends: python3, python3-pyqt6, python3-schedule, python3-psutil
-Maintainer: ${{ github.actor }}
-Description: KDE Toolbox
- A PyQt6-based toolbox for managing KDE services with scheduled task support.
-EOF
-          
-          cat > deb-build/usr/bin/kde-toolbox << 'SCRIPT'
-#!/bin/bash
-exec python3 -m kde_toolbox.main "\$@"
-SCRIPT
+
+          echo "Package: kde-toolbox" > deb-build/DEBIAN/control
+          echo "Version: $VERSION" >> deb-build/DEBIAN/control
+          echo "Section: utils" >> deb-build/DEBIAN/control
+          echo "Priority: optional" >> deb-build/DEBIAN/control
+          echo "Architecture: all" >> deb-build/DEBIAN/control
+          echo "Depends: python3, python3-pyqt6, python3-schedule, python3-psutil" >> deb-build/DEBIAN/control
+          echo "Maintainer: ${{ github.actor }}" >> deb-build/DEBIAN/control
+          echo "Description: KDE Toolbox" >> deb-build/DEBIAN/control
+          echo " A PyQt6-based toolbox for managing KDE services with scheduled task support." >> deb-build/DEBIAN/control
+
+          echo '#!/bin/bash' > deb-build/usr/bin/kde-toolbox
+          echo 'exec python3 -m kde_toolbox.main "$@"' >> deb-build/usr/bin/kde-toolbox
           chmod +x deb-build/usr/bin/kde-toolbox
-          
+
           cp -r kde_toolbox/* deb-build/usr/lib/python3/dist-packages/kde_toolbox/
-          
+
           dpkg-deb --build deb-build kde-toolbox_${VERSION}_all.deb
 
       - name: Upload DEB artifact
