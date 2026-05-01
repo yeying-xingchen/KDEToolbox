@@ -1,6 +1,9 @@
 import logging
 import subprocess
 import os
+import glob
+import shutil
+from pathlib import Path
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -75,20 +78,31 @@ class KdeService:
     def restart_kwin(self) -> tuple[bool, str]:
         try:
             if self._display_server == DisplayServer.X11:
-                cmd = "kwin_x11 --replace"
+                cmd = ["kwin_x11", "--replace"]
             else:
                 return False, "Wayland: KWin cannot be restarted with --replace"
 
-            logger.info(f"Executing: {cmd}")
-            os.system(f"{cmd} &")
-            return True, f"KWin (X11) 重启命令已发送: {cmd}"
+            logger.info(f"Executing: {' '.join(cmd)}")
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            return True, f"KWin (X11) 重启命令已发送: {' '.join(cmd)}"
         except Exception as e:
             logger.error(f"KWin restart failed: {e}")
             return False, f"KWin 重启失败: {e}"
 
     def restart_plasmashell(self) -> tuple[bool, str]:
         try:
-            os.system("plasmashell --replace &")
+            cmd = ["plasmashell", "--replace"]
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
             return True, "Plasma Shell 重启命令已发送 (plasmashell --replace)"
         except Exception as e:
             logger.error(f"Plasma Shell restart failed: {e}")
@@ -96,13 +110,25 @@ class KdeService:
 
     def clear_cache_and_restart(self) -> tuple[bool, str]:
         try:
-            cache_dirs = [
-                os.path.expanduser("~/.cache/plasma*"),
-                os.path.expanduser("~/.cache/kioexec"),
-            ]
-            os.system("rm -rf ~/.cache/plasma* ~/.cache/kioexec 2>/dev/null")
+            cache_base = Path(os.path.expanduser("~/.cache"))
+            removed_count = 0
+            
+            for pattern in ["plasma*", "kioexec*"]:
+                for path in glob.glob(str(cache_base / pattern)):
+                    target = Path(path)
+                    try:
+                        if target.is_dir():
+                            shutil.rmtree(target)
+                        else:
+                            target.unlink()
+                        removed_count += 1
+                        logger.info(f"Removed cache: {path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to remove {path}: {e}")
+            
+            logger.info(f"Cleared {removed_count} cache files/directories")
             self.restart_plasmashell()
-            return True, "缓存已清除，Plasma Shell 重启命令已发送"
+            return True, f"缓存已清除（{removed_count} 项），Plasma Shell 重启命令已发送"
         except Exception as e:
             return False, f"清除缓存失败: {e}"
 
