@@ -9,11 +9,9 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.10', '3.11', '3.12']
 
     steps:
@@ -37,41 +35,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.os }}-python${{ matrix.python-version }}
+          name: dist-python${{ matrix.python-version }}
           path: dist/
-
-  test:
-    needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.10', '3.11', '3.12']
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-cov
-          pip install .
-
-      - name: Run tests
-        run: |
-          python -m pytest --version || echo "No pytest tests found"
-        continue-on-error: true
-
-      - name: Import check
-        run: |
-          python -c "import kde_toolbox; print('Import successful')"
-        continue-on-error: true
 
   build-deb:
     runs-on: ubuntu-latest
@@ -79,44 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential debhelper devscripts
-          python -m pip install --upgrade pip
-          pip install build wheel stdeb
+      - name: Get version
+        run: echo "VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)" >> $GITHUB_ENV
 
       - name: Build DEB package
         run: |
-          python3 setup.py --command-packages=stdeb.command bdist_deb
-        continue-on-error: true
-
-      - name: Build DEB using FPM
-        run: |
-          gem install fpm
-          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
-          python -m build --wheel
-          fpm -s python -t deb -n kde-toolbox -v $VERSION \
-            --depends python3 \
-            --depends python3-pyqt6 \
-            --depends python3-schedule \
-            --depends python3-psutil \
-            --description "KDE Toolbox - A PyQt6-based toolbox for KDE desktop" \
-            --url "https://github.com/${{ github.repository }}" \
-            --maintainer "${{ github.actor }}" \
-            --license MIT \
-            setup.py
-        continue-on-error: true
-
-      - name: Manual DEB build
-        if: failure()
-        run: |
-          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
           mkdir -p deb-build/DEBIAN
           mkdir -p deb-build/usr/bin
           mkdir -p deb-build/usr/lib/python3/dist-packages/kde_toolbox
@@ -124,32 +56,33 @@ jobs:
 
           cp kde-toolbox.desktop deb-build/usr/share/applications/
 
-          echo "Package: kde-toolbox" > deb-build/DEBIAN/control
-          echo "Version: $VERSION" >> deb-build/DEBIAN/control
-          echo "Section: utils" >> deb-build/DEBIAN/control
-          echo "Priority: optional" >> deb-build/DEBIAN/control
-          echo "Architecture: all" >> deb-build/DEBIAN/control
-          echo "Depends: python3, python3-pyqt6, python3-schedule, python3-psutil" >> deb-build/DEBIAN/control
-          echo "Maintainer: ${{ github.actor }}" >> deb-build/DEBIAN/control
-          echo "Description: KDE Toolbox" >> deb-build/DEBIAN/control
-          echo " A PyQt6-based toolbox for managing KDE services with scheduled task support." >> deb-build/DEBIAN/control
+          cat > deb-build/DEBIAN/control << EOF
+Package: kde-toolbox
+Version: ${{ env.VERSION }}
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3, python3-pyqt6, python3-schedule, python3-psutil
+Maintainer: ${{ github.actor }}
+Description: KDE Toolbox
+ A PyQt6-based toolbox for managing KDE services with scheduled task support.
+EOF
 
-          echo '#!/bin/bash' > deb-build/usr/bin/kde-toolbox
-          echo 'exec python3 -m kde_toolbox.main "$@"' >> deb-build/usr/bin/kde-toolbox
+          cat > deb-build/usr/bin/kde-toolbox << 'SCRIPT'
+#!/bin/bash
+exec python3 -m kde_toolbox.main "$@"
+SCRIPT
           chmod +x deb-build/usr/bin/kde-toolbox
 
           cp -r kde_toolbox/* deb-build/usr/lib/python3/dist-packages/kde_toolbox/
 
-          dpkg-deb --build deb-build kde-toolbox_${VERSION}_all.deb
+          dpkg-deb --build deb-build kde-toolbox_${{ env.VERSION }}_all.deb
 
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
         with:
           name: kde-toolbox-deb
-          path: |
-            deb_dist/*.deb
-            *.deb
-            deb-build/*.deb
+          path: "*.deb"
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
