@@ -37,28 +37,27 @@
 - KDE Plasma 桌面环境
 - PyQt6 >= 6.4.0
 
-### 安装步骤
+### 方式一：安装 DEB 包（推荐）
+
+从 [Releases](https://github.com/yeying-xingchen/KDEToolbox/releases) 页面下载最新 `.deb` 文件，然后安装：
+
+```bash
+sudo dpkg -i kde-toolbox_*.deb
+sudo apt-get install -f  # 修复依赖（如果需要）
+```
+
+### 方式二：使用 pip 安装
 
 1. 克隆仓库
 ```bash
-git clone https://github.com/your-username/KDEToolbox.git
+git clone https://github.com/yeying-xingchen/KDEToolbox.git
 cd KDEToolbox
 ```
 
-2. 使用 pip 安装
-```bash
-pip install .
-```
-
-或者使用 uv（推荐）
+2. 使用 uv 安装
 ```bash
 uv sync
 uv pip install .
-```
-
-3. 运行应用
-```bash
-kde-toolbox
 ```
 
 ## 使用方法
