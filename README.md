@@ -163,6 +163,10 @@ python -m kde_toolbox.main
 
 欢迎提交 Issue 和 Pull Request！
 
+## 友情链接
+
+[LINUX DO](https://linux.do/)
+
 ## 许可证
 
 本项目采用 MIT 许可证。
