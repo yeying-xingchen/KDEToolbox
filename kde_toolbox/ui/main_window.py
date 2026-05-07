@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit,
-    QMessageBox, QStatusBar, QFrame, QCheckBox,
+    QMessageBox, QStatusBar, QFrame, QCheckBox, QProgressBar,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 
 import logging
@@ -13,6 +13,7 @@ from kde_toolbox.kde.service import KdeService, DisplayServer
 from kde_toolbox.core.config import AppConfig, ScheduledTask
 from kde_toolbox.core.config import is_auto_start_enabled, apply_auto_start_setting
 from kde_toolbox.core.scheduler import SchedulerThread
+from kde_toolbox.core.memory_monitor import MemoryMonitor
 from kde_toolbox.ui.tray_icon import TrayIcon
 
 STYLE_SHEET = """
@@ -178,6 +179,14 @@ class MainWindow(QWidget):
         self.config = AppConfig.load()
         self.scheduler_threads = []
         self.tray_icon = None
+        self.memory_monitor = MemoryMonitor(
+            threshold_warning=self.config.memory_threshold_warning,
+            threshold_critical=self.config.memory_threshold_critical
+        )
+        self.memory_monitor.set_callbacks(
+            warning_callback=self._on_memory_warning,
+            critical_callback=self._on_memory_critical
+        )
 
         self.setWindowTitle("KDE Toolbox")
         self.resize(850, 620)
@@ -187,6 +196,7 @@ class MainWindow(QWidget):
         self._setup_tray()
         self._load_system_info()
         self._load_tasks()
+        self._start_memory_monitor()
 
     def _setup_tray(self):
         if TrayIcon.isSystemTrayAvailable():
@@ -300,6 +310,35 @@ class MainWindow(QWidget):
         self.chk_minimize_to_tray.stateChanged.connect(self._on_minimize_to_tray_changed)
         layout.addWidget(self.chk_minimize_to_tray)
 
+        memory_layout = QHBoxLayout()
+        memory_layout.setSpacing(10)
+
+        self.chk_memory_monitor = QCheckBox("内存不足时自动重启 KWin")
+        self.chk_memory_monitor.setChecked(self.config.auto_restart_on_memory)
+        self.chk_memory_monitor.stateChanged.connect(self._on_memory_monitor_changed)
+        memory_layout.addWidget(self.chk_memory_monitor)
+
+        self.memory_progress = QProgressBar()
+        self.memory_progress.setRange(0, 100)
+        self.memory_progress.setFixedWidth(120)
+        self.memory_progress.setTextVisible(True)
+        self.memory_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: 4px;
+                text-align: center;
+                background-color: rgba(0,0,0,0.3);
+                min-height: 20px;
+            }
+            QProgressBar::chunk {
+                border-radius: 3px;
+                background-color: #4caf50;
+            }
+        """)
+        memory_layout.addWidget(self.memory_progress)
+
+        layout.addLayout(memory_layout)
+
         return group
 
     def _on_auto_start_changed(self, state):
@@ -316,6 +355,73 @@ class MainWindow(QWidget):
         self.config.save()
         status = "已启用" if enabled else "已禁用"
         self.status_bar.showMessage(f"最小化到系统托盘{status}")
+
+    def _on_memory_monitor_changed(self, state):
+        enabled = state == Qt.CheckState.Checked.value
+        self.config.auto_restart_on_memory = enabled
+        self.config.save()
+        status = "已启用" if enabled else "已禁用"
+        self.status_bar.showMessage(f"内存监控{status}")
+        if enabled:
+            self.memory_monitor.start()
+        else:
+            self.memory_monitor.stop()
+
+    def _start_memory_monitor(self):
+        if self.memory_monitor.is_available():
+            self._update_memory_display()
+            if self.config.auto_restart_on_memory:
+                self.memory_monitor.start()
+
+    def _update_memory_display(self):
+        if hasattr(self, 'memory_progress'):
+            percent, used, total = self.memory_monitor.get_memory_usage()
+            self.memory_progress.setValue(int(percent))
+
+            if percent >= self.config.memory_threshold_critical:
+                self.memory_progress.setStyleSheet("""
+                    QProgressBar {
+                        border: 1px solid rgba(255,255,255,0.12);
+                        border-radius: 4px;
+                        text-align: center;
+                        background-color: rgba(0,0,0,0.3);
+                        min-height: 20px;
+                    }
+                    QProgressBar::chunk {
+                        border-radius: 3px;
+                        background-color: #e53935;
+                    }
+                """)
+            elif percent >= self.config.memory_threshold_warning:
+                self.memory_progress.setStyleSheet("""
+                    QProgressBar {
+                        border: 1px solid rgba(255,255,255,0.12);
+                        border-radius: 4px;
+                        text-align: center;
+                        background-color: rgba(0,0,0,0.3);
+                        min-height: 20px;
+                    }
+                    QProgressBar::chunk {
+                        border-radius: 3px;
+                        background-color: #ff9800;
+                    }
+                """)
+            else:
+                self.memory_progress.setStyleSheet("""
+                    QProgressBar {
+                        border: 1px solid rgba(255,255,255,0.12);
+                        border-radius: 4px;
+                        text-align: center;
+                        background-color: rgba(0,0,0,0.3);
+                        min-height: 20px;
+                    }
+                    QProgressBar::chunk {
+                        border-radius: 3px;
+                        background-color: #4caf50;
+                    }
+                """)
+
+            QTimer.singleShot(5000, self._update_memory_display)
 
     def _create_scheduler_group(self) -> QGroupBox:
         group = QGroupBox(" 定时任务")
@@ -487,6 +593,28 @@ class MainWindow(QWidget):
     def _on_task_triggered(self, task_name: str):
         self.status_bar.showMessage(f"任务已执行: {task_name}")
 
+    def _on_memory_warning(self, memory_percent: float):
+        self.status_bar.showMessage(f"内存使用率警告: {memory_percent:.1f}%")
+        if self.kde_service.display_server == DisplayServer.WAYLAND:
+            return
+        if self.config.auto_restart_on_memory:
+            reply = QMessageBox.question(
+                self,
+                "内存不足",
+                f"内存使用率已达 {memory_percent:.1f}%，是否立即重启 KWin？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._on_restart_kwin()
+
+    def _on_memory_critical(self, memory_percent: float):
+        self.status_bar.showMessage(f"内存使用率危急: {memory_percent:.1f}%，正在重启 KWin...")
+        if self.kde_service.display_server == DisplayServer.WAYLAND:
+            return
+        if self.config.auto_restart_on_memory:
+            self._on_restart_kwin()
+
     def _show_status(self, message: str, success: bool):
         self.status_bar.showMessage(message)
         msg_box = QMessageBox(self)
@@ -506,4 +634,6 @@ class MainWindow(QWidget):
         else:
             for thread in self.scheduler_threads:
                 thread.stop()
+            if hasattr(self, 'memory_monitor'):
+                self.memory_monitor.stop()
             event.accept()

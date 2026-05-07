@@ -34,6 +34,9 @@ class AppConfig:
     minimize_to_tray: bool = True
     confirm_before_action: bool = True
     tasks: list[dict] = field(default_factory=list)
+    auto_restart_on_memory: bool = False
+    memory_threshold_warning: float = 85.0
+    memory_threshold_critical: float = 95.0
 
     @classmethod
     def load(cls) -> "AppConfig":

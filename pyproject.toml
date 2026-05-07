@@ -1,6 +1,6 @@
 [project]
 name = "kdetoolbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "KDE Toolbox - A PyQt6-based toolbox for managing KDE services with scheduled task support"
 requires-python = ">=3.10"
 dependencies = [

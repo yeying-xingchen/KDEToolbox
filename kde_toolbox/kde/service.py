@@ -78,9 +78,9 @@ class KdeService:
     def restart_kwin(self) -> tuple[bool, str]:
         try:
             if self._display_server == DisplayServer.X11:
-                cmd = ["kwin_x11", "--replace"]
+                cmd = ["kwin", "--replace"]
             else:
-                return False, "Wayland: KWin cannot be restarted with --replace"
+                cmd = ["plasmashell", "--replace"]
 
             logger.info(f"Executing: {' '.join(cmd)}")
             subprocess.Popen(
